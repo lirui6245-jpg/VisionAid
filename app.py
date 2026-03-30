@@ -2,10 +2,11 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 import io
+import base64
 from gtts import gTTS
 
 # ==========================================
-# 面向对象架构 (OOAD) - 契合第三周类图设计方案
+# 面向对象架构 (OOAD) - 核心功能矩阵区块
 # ==========================================
 
 class GeminiAPIClient:
@@ -27,7 +28,6 @@ class GeminiAPIClient:
         # 利用单例模式与内存缓存消除冷启动延迟
         api_key = st.secrets["GEMINI_API_KEY"]
         genai.configure(api_key=api_key)
-        # 注意：此处已升级为最新版本的模型
         return genai.GenerativeModel('gemini-2.5-flash')
 
     def fetch_description(self, image_obj, prompt) -> str:
@@ -54,24 +54,38 @@ class AccessibilityRenderer:
     @staticmethod
     def trigger_tts_autoplay(text: str):
         """ 
-        生成语音并在前端播放
-        【修复】解决移动端/微信内置浏览器的音频解码报错与自动播放拦截问题
+        生成语音并在前端渲染【超大无障碍交互按键】
+        彻底抛弃自带播放器，利用 HTML/CSS 打造盲按无压力的巨型按钮
         """
         try:
+            # 1. 生成语音并写入内存
             tts = gTTS(text=text, lang='zh-cn')
             audio_fp = io.BytesIO()
             tts.write_to_fp(audio_fp)
             audio_fp.seek(0)
             
-            # 关键修复 1：不要直接传对象，而是读取出真实的 bytes 字节流
-            audio_bytes = audio_fp.read()
+            # 2. 将音频字节流转换为 Base64 编码字符串
+            audio_base64 = base64.b64encode(audio_fp.read()).decode('utf-8')
             
-            # 关键修复 2：将 format 改为更兼容的 "audio/mpeg"
-            # 关键修复 3：关闭 autoplay=False，绕过浏览器的静音拦截，改为让用户手动点击播放
-            st.audio(audio_bytes, format="audio/mpeg", autoplay=False)
+            # 3. 构造巨型按钮的 HTML 与 CSS 代码
+            # 设定了极大的内边距(padding: 30px)和巨大的字号(font-size: 28px)，以及醒目的背景色
+            audio_html = f"""
+                <audio id="visionaid-audio" src="data:audio/mp3;base64,{audio_base64}"></audio>
+                <button onclick="document.getElementById('visionaid-audio').play()" 
+                        style="width: 100%; padding: 35px; margin-top: 20px; font-size: 30px; 
+                               font-weight: bold; background-color: #28B463; color: white; 
+                               border: none; border-radius: 15px; box-shadow: 0 8px 16px rgba(0,0,0,0.2); 
+                               cursor: pointer;">
+                    🔊 点击播放语音播报
+                </button>
+            """
+            
+            # 4. 强制允许 Streamlit 渲染这段自定义 HTML
+            st.markdown(audio_html, unsafe_allow_html=True)
             
         except Exception as e:
             st.warning("语音播报引擎暂时不可用，请依赖系统屏幕朗读器。")
+
 
 class VisionAidApp:
     """ 主控应用类：生命周期调度与 UI 渲染决策中枢 """
@@ -86,9 +100,9 @@ class VisionAidApp:
 
     def run_ui(self):
         st.title("👁️ VisionAid 语音视觉助手")
-        st.markdown("#### 📱 请点击下方按钮拍摄前方环境")
+        st.markdown("#### 📱 请点击下方区域拍摄前方环境")
 
-        # 核心交互升级：直接唤醒移动端摄像头，摒弃繁琐的上传流程
+        # 唤醒移动端摄像头
         camera_photo = st.camera_input("拍摄环境照片", label_visibility="collapsed")
 
         if camera_photo is not None:
@@ -117,12 +131,11 @@ class VisionAidApp:
                     # 视觉隔离渲染
                     self.renderer.render_markdown(description)
                     
-                    # 触发 TTS 自动语音播报
+                    # 触发超大按钮 TTS 语音播放器
                     self.renderer.trigger_tts_autoplay(description)
 
                 except Exception as e:
                     st.error(f"网络通信异常，详情: {e}")
-
 
 # ==========================================
 # 程序的唯一执行入口
