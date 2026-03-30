@@ -38,8 +38,8 @@ def main():
                 prompt = "你现在是 VisionAid 助手。请精准描述画面主体、环境及潜在安全危险（如台阶、障碍物），语言简练顺口，50-100字。"
                 response = model.generate_content([prompt, image])
                 st.success(f"### **{response.text.strip()}**")
-            except Exception:
-                st.error("网络通信异常，请检查配置或稍后重试。")
+            except Exception as e:
+            st.error(f"侦测到真实错误，详情如下：{e}")
 
 if __name__ == "__main__":
     main()
