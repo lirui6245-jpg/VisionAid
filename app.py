@@ -54,19 +54,24 @@ class AccessibilityRenderer:
     @staticmethod
     def trigger_tts_autoplay(text: str):
         """ 
-        生成语音并在前端自动播放
-        遵守零本地环境约束，使用 io.BytesIO 缓存音频文件 
+        生成语音并在前端播放
+        【修复】解决移动端/微信内置浏览器的音频解码报错与自动播放拦截问题
         """
         try:
             tts = gTTS(text=text, lang='zh-cn')
             audio_fp = io.BytesIO()
             tts.write_to_fp(audio_fp)
             audio_fp.seek(0)
-            # st.audio 设置 autoplay=True 实现自动语音播报
-            st.audio(audio_fp, format="audio/mp3", autoplay=True)
+            
+            # 关键修复 1：不要直接传对象，而是读取出真实的 bytes 字节流
+            audio_bytes = audio_fp.read()
+            
+            # 关键修复 2：将 format 改为更兼容的 "audio/mpeg"
+            # 关键修复 3：关闭 autoplay=False，绕过浏览器的静音拦截，改为让用户手动点击播放
+            st.audio(audio_bytes, format="audio/mpeg", autoplay=False)
+            
         except Exception as e:
             st.warning("语音播报引擎暂时不可用，请依赖系统屏幕朗读器。")
-
 
 class VisionAidApp:
     """ 主控应用类：生命周期调度与 UI 渲染决策中枢 """
