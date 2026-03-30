@@ -75,3 +75,4 @@ def main():
                 st.error(f"侦测到真实错误，详情如下：{e}")
 
 if __name__ == "__main__":
+    main()
