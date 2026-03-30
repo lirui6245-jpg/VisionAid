@@ -2,77 +2,126 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 import io
+from gtts import gTTS
 
 # ==========================================
-# 一、 页面与无障碍 (A11y) 初始化配置
+# 面向对象架构 (OOAD) - 契合第三周类图设计方案
 # ==========================================
-st.set_page_config(
-    page_title="VisionAid 视障助手", 
-    page_icon="👁️", 
-    layout="centered"
-)
 
-# ==========================================
-# 二、 核心业务逻辑与性能调优
-# ==========================================
-@st.cache_resource(show_spinner=False)
-def load_gemini_model():
-    """
-    初始化 Gemini 模型实例。
-    """
-    try:
-        api_key = st.secrets["GEMINI_API_KEY"]
-    except KeyError:
-        st.error("系统配置异常：未找到 API 密钥，请在 Streamlit 后台配置 Secrets。")
-        st.stop()
-        
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel('gemini-2.5-flash')
+class GeminiAPIClient:
+    """ AI 通信客户端类：负责与 Google大模型进行安全交互 """
+    def __init__(self):
+        self.api_key = self._load_credentials()
+        self.model = self._initialize_model()
 
-# ==========================================
-# 三、 前端 UI 与主程序逻辑
-# ==========================================
-def main():
-    st.title("👁️ VisionAid 智能视觉助手")
-    st.markdown("### 请上传您前方的照片，我将为您描述周围的环境。")
-
-    uploaded_file = st.file_uploader(
-        label="上传照片 (支持 JPG/PNG)", 
-        type=["jpg", "jpeg", "png"], 
-        help="点击此处选择或拍摄照片"
-    )
-
-    if uploaded_file is not None:
+    def _load_credentials(self):
         try:
-            image_bytes = uploaded_file.getvalue()
-            image = Image.open(io.BytesIO(image_bytes))
-            st.image(image, caption="已接收到图像", use_container_width=True)
-        except Exception:
-            st.error("抱歉，图像读取失败，请尝试重新上传。")
-            return
+            return st.secrets["GEMINI_API_KEY"]
+        except KeyError:
+            st.error("系统严重异常：未读取到环境变量中的 API 密钥。")
+            st.stop()
 
-        with st.spinner("AI 正在仔细观察当前环境，请稍候..."):
+    @staticmethod
+    @st.cache_resource(show_spinner=False)
+    def _initialize_model():
+        # 利用单例模式与内存缓存消除冷启动延迟
+        api_key = st.secrets["GEMINI_API_KEY"]
+        genai.configure(api_key=api_key)
+        # 注意：此处已升级为最新版本的模型
+        return genai.GenerativeModel('gemini-2.5-flash')
+
+    def fetch_description(self, image_obj, prompt) -> str:
+        """ 发起 HTTPS 融合数据包请求并提取中文响应 """
+        response = self._initialize_model().generate_content([prompt, image_obj])
+        return response.text.strip()
+
+
+class ImageProcessor:
+    """ 图像处理工具类：负责图像字节流的安全转换与内存管理 """
+    @staticmethod
+    def load_image_from_memory(image_bytes):
+        """ 严格遵守零本地环境约束，完全在内存中转化图像流 """
+        return Image.open(io.BytesIO(image_bytes))
+
+
+class AccessibilityRenderer:
+    """ 无障碍渲染类：负责大字号高对比度渲染与 TTS 语音合成 """
+    @staticmethod
+    def render_markdown(text: str):
+        """ 强制使用 H3 级别粗体，适配 VoiceOver/TalkBack """
+        st.success(f"### **{text}**")
+
+    @staticmethod
+    def trigger_tts_autoplay(text: str):
+        """ 
+        生成语音并在前端自动播放
+        遵守零本地环境约束，使用 io.BytesIO 缓存音频文件 
+        """
+        try:
+            tts = gTTS(text=text, lang='zh-cn')
+            audio_fp = io.BytesIO()
+            tts.write_to_fp(audio_fp)
+            audio_fp.seek(0)
+            # st.audio 设置 autoplay=True 实现自动语音播报
+            st.audio(audio_fp, format="audio/mp3", autoplay=True)
+        except Exception as e:
+            st.warning("语音播报引擎暂时不可用，请依赖系统屏幕朗读器。")
+
+
+class VisionAidApp:
+    """ 主控应用类：生命周期调度与 UI 渲染决策中枢 """
+    def __init__(self):
+        self.setup_page()
+        self.api_client = GeminiAPIClient()
+        self.renderer = AccessibilityRenderer()
+        self.image_processor = ImageProcessor()
+
+    def setup_page(self):
+        st.set_page_config(page_title="VisionAid 视障助手", page_icon="👁️", layout="centered")
+
+    def run_ui(self):
+        st.title("👁️ VisionAid 语音视觉助手")
+        st.markdown("#### 📱 请点击下方按钮拍摄前方环境")
+
+        # 核心交互升级：直接唤醒移动端摄像头，摒弃繁琐的上传流程
+        camera_photo = st.camera_input("拍摄环境照片", label_visibility="collapsed")
+
+        if camera_photo is not None:
             try:
-                model = load_gemini_model()
-                
-                prompt = """
-                你现在是 VisionAid——一款专为视障人士设计的智能视觉场景描述助手。
-                你的任务是精准、客观地分析用户上传的图像，并将其转化为通顺的中文自然语言描述。
-                请严格遵循以下原则：
-                1. 核心优先：优先描述画面正中央、最突出的主体及其动作。
-                2. 环境感知：简要说明主体所处的环境和当前光线/天气状态。
-                3. 安全预警：如果画面中存在明显的障碍物、台阶、红绿灯或潜在危险，请务必在描述中明确指出。
-                4. 语音友好：语言必须通俗易懂、简练顺口，总长度控制在 50-100 字以内。
-                """
-                
-                response = model.generate_content([prompt, image])
-                description = response.text.strip()
-                
-                st.success(f"### **{description}**")
-                
-            except Exception as e:
-                # 关键修改：直接把底层真实的英文错误日志抛到前端页面上
-                st.error(f"侦测到真实错误，详情如下：{e}")
+                # 内存级图像流注入
+                image_bytes = camera_photo.getvalue()
+                image = self.image_processor.load_image_from_memory(image_bytes)
+            except Exception:
+                st.error("摄像头数据读取失败，请重试。")
+                return
 
+            with st.spinner("AI 正在解析环境，正在生成语音..."):
+                try:
+                    prompt = """
+                    你现在是 VisionAid——一款专为视障人士设计的智能视觉场景描述助手。
+                    你的任务是精准、客观地分析用户拍摄的图像，并将其转化为通顺的中文自然语言描述。
+                    请严格遵循以下原则：
+                    1. 核心优先：优先描述画面正中央、最突出的主体及其动作。
+                    2. 环境感知：简要说明主体所处的环境。
+                    3. 安全预警：如果画面中存在明显的障碍物、台阶或潜在危险，请务必明确指出。
+                    4. 语音友好：语言必须通俗易懂、简练顺口，总长度控制在 50 字左右，方便后续转化为语音播报。
+                    """
+                    # 数据交接与远端推理
+                    description = self.api_client.fetch_description(image, prompt)
+                    
+                    # 视觉隔离渲染
+                    self.renderer.render_markdown(description)
+                    
+                    # 触发 TTS 自动语音播报
+                    self.renderer.trigger_tts_autoplay(description)
+
+                except Exception as e:
+                    st.error(f"网络通信异常，详情: {e}")
+
+
+# ==========================================
+# 程序的唯一执行入口
+# ==========================================
 if __name__ == "__main__":
-    main()
+    app = VisionAidApp()
+    app.run_ui()
