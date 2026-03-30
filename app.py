@@ -27,7 +27,7 @@ def load_gemini_model():
         st.stop()
         
     genai.configure(api_key=api_key)
-    return genai.GenerativeModel('gemini-1.5-flash')
+    return genai.GenerativeModel('gemini-2.5-flash')
 
 # ==========================================
 # 三、 前端 UI 与主程序逻辑
