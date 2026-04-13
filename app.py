@@ -19,7 +19,7 @@ class GeminiAPIClient:
     @st.cache_resource(show_spinner=False)
     def _get_model(_self):
         genai.configure(api_key=_self.api_key)
-        # ⚠️ 终于改对了！使用最新版 2.5 模型，彻底告别 404 报错
+        # 使用最新的 2.5 flash 模型
         return genai.GenerativeModel('gemini-2.5-flash')
 
     def fetch_description(self, image_obj, prompt) -> str:
@@ -101,4 +101,11 @@ class VisionAidApp:
                     description = self.api_client.fetch_description(image, prompt)
                     
                     self.renderer.render_markdown(description)
-                    self.renderer.trigger_invisible_audio
+                    self.renderer.trigger_invisible_audio(description)
+                # 就是这下面两行，刚才你大概率没复制到！
+                except Exception as e:
+                    st.error(f"分析失败，请检查网络或密钥: {e}")
+
+if __name__ == "__main__":
+    app = VisionAidApp()
+    app.run_ui()
