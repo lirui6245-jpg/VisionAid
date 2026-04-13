@@ -106,47 +106,4 @@ class AccessibilityRenderer:
 class VisionAidApp:
     """ 系统主控类：负责全生命周期的调度逻辑 """
     def __init__(self):
-        self.setup_page()
-        self.api_client = GeminiAPIClient()
-        self.renderer = AccessibilityRenderer()
-        self.image_processor = ImageProcessor()
-
-    def setup_page(self):
-        st.set_page_config(page_title="VisionAid 视障助手", page_icon="👁️")
-        self.renderer.inject_custom_css()
-
-    def run_ui(self):
-        # 恢复你要求的标题
-        st.markdown("<h2 style='text-align: center;'>👁️ VisionAid 语音视觉助手</h2>", unsafe_allow_html=True)
-        st.write("---")
-
-        # 核心交互入口：调用摄像头
-        camera_photo = st.camera_input("拍照探测环境", label_visibility="collapsed")
-
-        if camera_photo is not None:
-            image_bytes = camera_photo.getvalue()
-            image = self.image_processor.load_image_from_memory(image_bytes)
-
-            with st.spinner("AI 正在感知环境..."):
-                try:
-                    # 预置无障碍场景感知提示词
-                    prompt = """
-                    你现在是 VisionAid 智能视觉场景描述助手。
-                    任务：精准分析用户拍摄的图像，将其转化为通顺的中文场景描述。
-                    1. 优先描述正中央主体及其动作。
-                    2. 指出明显的障碍物、台阶或安全危险。
-                    3. 语言精炼顺口，长度在 50 字以内，方便语音播报。
-                    """
-                    description = self.api_client.fetch_description(image, prompt)
-                    
-                    # 结果呈现：大字号显示 + 隐形自动语音
-                    self.renderer.render_markdown(description)
-                    self.renderer.trigger_invisible_audio(description)
-
-                except Exception as e:
-                    st.error(f"分析失败，请检查网络或密钥: {e}")
-
-# 执行程序
-if __name__ == "__main__":
-    app = VisionAidApp()
-    app.run_ui()
+        # ⚠️ 修复项：必须先初始化组件
