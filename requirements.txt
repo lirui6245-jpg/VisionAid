@@ -2,3 +2,4 @@ streamlit>=1.32.0
 google-generativeai>=0.4.0
 Pillow>=10.2.0
 gTTS>=2.5.1
+streamlit-back-camera-input
