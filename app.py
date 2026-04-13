@@ -21,8 +21,8 @@ class GeminiAPIClient:
     @st.cache_resource(show_spinner=False)
     def _get_model(_self):
         genai.configure(api_key=_self.api_key)
-        # ⚠️ 紧急替换：换成拥有极高免费额度、速度最快的 8b 模型，确保演示万无一失
-        return genai.GenerativeModel('gemini-1.5-flash-8b')
+        # ⚠️ 答辩保命版：退回最标准的官方通用名字，100%不报 404，且每天有 1500 次额度
+        return genai.GenerativeModel('gemini-1.5-flash')
 
     def fetch_description(self, image_obj, prompt) -> str:
         model = self._get_model()
