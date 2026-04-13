@@ -4,10 +4,13 @@ from PIL import Image
 import io
 import base64
 from gtts import gTTS
-# ⚠️ 引入新的第三方后置摄像头专属组件
-from streamlit_back_camera_input import back_camera_input
+
+# ==========================================
+# 面向对象架构 (OOAD) - 严格遵循规划报告类图设计 [cite: 25, 29]
+# ==========================================
 
 class GeminiAPIClient:
+    """ 云端认知模块：负责与 Google 大模型进行安全通信 [cite: 25] """
     def __init__(self):
         self.api_key = self._load_credentials()
 
@@ -15,7 +18,7 @@ class GeminiAPIClient:
         try:
             return st.secrets["GEMINI_API_KEY"]
         except KeyError:
-            st.error("系统严重异常：未读取到环境变量中的 API 密钥。")
+            st.error("密钥缺失：请在 Streamlit 后台配置 GEMINI_API_KEY。")
             st.stop()
 
     @st.cache_resource(show_spinner=False)
@@ -29,41 +32,75 @@ class GeminiAPIClient:
         return response.text.strip()
 
 class ImageProcessor:
+    """ 业务逻辑模块：负责图像流预处理 [cite: 25] """
     @staticmethod
     def load_image_from_memory(image_bytes):
         return Image.open(io.BytesIO(image_bytes))
 
 class AccessibilityRenderer:
+    """ 前端交互模块：负责 CSS 注入与巨型语音交互 [cite: 25] """
     @staticmethod
-    def inject_custom_css():
-        # 清理掉了之前那些导致界面变形的“暴力放大”代码
-        # 只保留隐藏页眉页脚，还原最清爽的界面
+    def inject_mobile_optimization():
+        """ 
+        【核心外挂】强行放大组件并移除干扰 
+        """
         css = """
         <style>
         header {visibility: hidden;}
         footer {visibility: hidden;}
+        
+        /* 极致放大拍照按钮，占据屏幕下半部分 */
+        div[data-testid="stCameraInput"] button {
+            transform: scale(2.5) !important;
+            margin: 60px auto !important;
+            background-color: #28B463 !important;
+            color: white !important;
+            border-radius: 15px !important;
+            height: 100px !important;
+            width: 80% !important;
+        }
+        
+        /* 极巨化翻转摄像头图标 */
+        div[data-testid="stCameraInput"] button[title="Switch camera"] {
+            transform: scale(4.0) !important;
+            transform-origin: top right !important;
+        }
         </style>
         """
         st.markdown(css, unsafe_allow_html=True)
 
     @staticmethod
-    def render_markdown(text: str):
-        st.success(f"### **{text}**")
-
-    @staticmethod
-    def trigger_invisible_audio(text: str):
+    def trigger_giant_audio_trigger(text: str):
+        """ 
+        【交互突破】全屏盲触播放器
+        由于手机系统禁止自动播放，我们创建一个覆盖全屏的“透明点击层”
+        用户只要触摸屏幕，就能播放声音
+        """
         try:
             tts = gTTS(text=text, lang='zh-cn')
             audio_fp = io.BytesIO()
             tts.write_to_fp(audio_fp)
             audio_fp.seek(0)
             audio_base64 = base64.b64encode(audio_fp.read()).decode('utf-8')
-            audio_html = f'<audio autoplay="true" src="data:audio/mp3;base64,{audio_base64}"></audio>'
+            
+            # 构造一个充满屏幕的绿色巨型按钮，写着“点击听取播报”
+            audio_html = f"""
+                <audio id="v-audio" src="data:audio/mp3;base64,{audio_base64}"></audio>
+                <button onclick="document.getElementById('v-audio').play()" 
+                        style="width: 100%; height: 300px; margin-top: 20px; 
+                               font-size: 32px; font-weight: bold; 
+                               background-color: #28B463; color: white; 
+                               border: none; border-radius: 20px;
+                               box-shadow: 0 10px 20px rgba(0,0,0,0.3);">
+                    🔊 结果已就绪 <br> [ 拍我听取播报 ]
+                </button>
+            """
             st.markdown(audio_html, unsafe_allow_html=True)
         except Exception:
-            st.warning("语音合成尝试失败。")
+            st.warning("语音播报尝试失败。")
 
 class VisionAidApp:
+    """ 主控应用类：调度系统生命周期 [cite: 29] """
     def __init__(self):
         self.api_client = GeminiAPIClient()
         self.renderer = AccessibilityRenderer()
@@ -71,15 +108,13 @@ class VisionAidApp:
         self.setup_page()
 
     def setup_page(self):
-        st.set_page_config(page_title="VisionAid 视障助手", page_icon="👁️")
-        self.renderer.inject_custom_css()
+        st.set_page_config(page_title="VisionAid", page_icon="👁️")
+        self.renderer.inject_mobile_optimization()
 
     def run_ui(self):
         st.markdown("<h2 style='text-align: center;'>👁️ VisionAid 语音视觉助手</h2>", unsafe_allow_html=True)
-        st.markdown("<h4 style='text-align: center; color: #28B463;'>👇 盲触模式：直接点击下方画面任意位置拍照 👇</h4>", unsafe_allow_html=True)
         
-        # ⚠️ 核心替换：使用不需要按钮、默认后置的黑客组件
-        camera_photo = back_camera_input()
+        camera_photo = st.camera_input("拍照", label_visibility="collapsed")
 
         if camera_photo is not None:
             image_bytes = camera_photo.getvalue()
@@ -87,13 +122,14 @@ class VisionAidApp:
 
             with st.spinner("AI 正在感知环境..."):
                 try:
-                    prompt = "你现在是 VisionAid 智能视觉场景描述助手。任务：精准分析用户拍摄的图像，将其转化为通顺的中文场景描述。1. 优先描述正中央主体及其动作。2. 指出明显的障碍物、台阶或安全危险。3. 语言精炼顺口，长度在 50 字以内，方便语音播报。"
+                    prompt = "你现在是 VisionAid 智能助手。请用 50 字以内的中文描述图像中央的内容，并指出潜在危险。"
                     description = self.api_client.fetch_description(image, prompt)
                     
-                    self.renderer.render_markdown(description)
-                    self.renderer.trigger_invisible_audio(description)
+                    st.success(f"### **{description}**")
+                    # 触发巨型点击播放器
+                    self.renderer.trigger_giant_audio_trigger(description)
                 except Exception as e:
-                    st.error(f"分析失败，请检查网络或密钥: {e}")
+                    st.error(f"分析失败: {e}")
 
 if __name__ == "__main__":
     app = VisionAidApp()
