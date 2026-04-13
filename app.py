@@ -20,8 +20,8 @@ class GeminiAPIClient:
     @st.cache_resource(show_spinner=False)
     def _get_model(_self):
         genai.configure(api_key=_self.api_key)
-        # ⚠️ 换成每天有 1500 次额度的高速主力模型，并加上 latest 后缀防止 404
-        return genai.GenerativeModel('gemini-1.5-flash-latest')
+        # ⚠️ 终极替换：使用专门适配免费大额度的 8b 轻量级视觉模型
+        return genai.GenerativeModel('gemini-1.5-flash-8b')
 
     def fetch_description(self, image_obj, prompt) -> str:
         model = self._get_model()
@@ -57,7 +57,6 @@ class AccessibilityRenderer:
             audio_fp.seek(0)
             audio_base64 = base64.b64encode(audio_fp.read()).decode('utf-8')
             
-            # 双重保险：尝试自动播放 + 巨型盲触备用按钮
             audio_html = f"""
                 <audio id="visionaid-audio" autoplay="autoplay" src="data:audio/mpeg;base64,{audio_base64}"></audio>
                 <button onclick="document.getElementById('visionaid-audio').play()" 
