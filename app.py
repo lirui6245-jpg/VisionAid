@@ -10,7 +10,7 @@ from gtts import gTTS
 # ==========================================
 
 class GeminiAPIClient:
-    """ AI 通信客户端类：负责与 Google大模型进行安全交互 """
+    """ AI 通信客户端类 """
     def __init__(self):
         self.api_key = self._load_credentials()
         self.model = self._initialize_model()
@@ -42,13 +42,16 @@ class ImageProcessor:
 
 
 class AccessibilityRenderer:
-    """ 无障碍渲染类：大字号渲染与巨型 TTS 语音按钮 """
+    """ 无障碍渲染类：大字号渲染与隐形自动语音 """
     @staticmethod
     def render_markdown(text: str):
         st.success(f"### **{text}**")
 
     @staticmethod
     def trigger_tts_autoplay(text: str):
+        """ 
+        【核心突破】抛弃可视播放器，强行注入隐形自动播放标签 
+        """
         try:
             tts = gTTS(text=text, lang='zh-cn')
             audio_fp = io.BytesIO()
@@ -57,20 +60,13 @@ class AccessibilityRenderer:
             
             audio_base64 = base64.b64encode(audio_fp.read()).decode('utf-8')
             
-            # 巨型语音播放按钮
+            # 删除了按钮，只保留隐形的 audio 标签，并强制加入 autoplay 属性
             audio_html = f"""
-                <audio id="visionaid-audio" src="data:audio/mp3;base64,{audio_base64}"></audio>
-                <button onclick="document.getElementById('visionaid-audio').play()" 
-                        style="width: 100%; padding: 35px; margin-top: 20px; font-size: 30px; 
-                               font-weight: bold; background-color: #28B463; color: white; 
-                               border: none; border-radius: 15px; box-shadow: 0 8px 16px rgba(0,0,0,0.2); 
-                               cursor: pointer;">
-                    🔊 点击播放语音播报
-                </button>
+                <audio autoplay="true" src="data:audio/mp3;base64,{audio_base64}"></audio>
             """
             st.markdown(audio_html, unsafe_allow_html=True)
         except Exception as e:
-            st.warning("语音播报引擎暂时不可用，请依赖系统屏幕朗读器。")
+            st.warning("语音播报引擎异常。")
 
 
 class VisionAidApp:
@@ -85,61 +81,65 @@ class VisionAidApp:
         st.set_page_config(page_title="VisionAid 视障助手", page_icon="👁️", layout="centered")
         
         # ==========================================
-        # ⚠️ 核心外挂：CSS 暴力破解官方摄像头组件 UI
+        # ⚠️ 终极外挂：CSS 暴力魔改，打造全屏盲触体验
         # ==========================================
         custom_css = """
         <style>
-        /* 强行放大整个摄像头组件区域内的主要按键（拍照/清除） */
+        /* 隐藏顶部烦人的各种多余提示和边框 */
+        header {visibility: hidden;}
+        footer {visibility: hidden;}
+        
+        /* 将拍照按钮和清除照片(重拍)按钮放大到极其夸张的地步 */
         div[data-testid="stCameraInput"] button {
-            transform: scale(1.8) !important;
+            transform: scale(2.0) !important;
             transform-origin: center center !important;
-            margin-top: 25px !important;
-            margin-bottom: 25px !important;
+            margin-top: 50px !important;
+            margin-bottom: 50px !important;
+            padding: 20px !important;
+            background-color: #28B463 !important; /* 强制绿色背景 */
+            color: white !important;
+            border-radius: 10px !important;
         }
         
-        /* 强行超级放大右上角的“翻转摄像头”图标按钮，方便盲触 */
-        div[data-testid="stCameraInput"] button[title="Switch camera"],
-        div[data-testid="stCameraInput"] button[kind="icon"] {
-            transform: scale(2.5) !important;
+        /* 翻转摄像头图标放大 */
+        div[data-testid="stCameraInput"] button[title="Switch camera"] {
+            transform: scale(3.0) !important;
             transform-origin: top right !important;
-            background-color: rgba(0,0,0,0.5) !important; /* 加深底色提高对比度 */
-            border-radius: 10px !important;
+            background-color: rgba(0,0,0,0.6) !important;
         }
         </style>
         """
         st.markdown(custom_css, unsafe_allow_html=True)
 
     def run_ui(self):
-        st.title("👁️ VisionAid 语音视觉助手")
-        st.markdown("#### 📱 请盲按下方巨大区域拍摄环境")
+        # 极简标题
+        st.markdown("<h2 style='text-align: center;'>👁️ 盲触极简版</h2>", unsafe_allow_html=True)
 
-        camera_photo = st.camera_input("拍摄环境照片", label_visibility="collapsed")
+        camera_photo = st.camera_input("拍摄", label_visibility="collapsed")
 
         if camera_photo is not None:
             try:
                 image_bytes = camera_photo.getvalue()
                 image = self.image_processor.load_image_from_memory(image_bytes)
             except Exception:
-                st.error("摄像头数据读取失败，请重试。")
+                st.error("读取失败，请重拍。")
                 return
 
-            with st.spinner("AI 正在解析环境，正在生成语音..."):
+            with st.spinner("解析中..."):
                 try:
                     prompt = """
-                    你现在是 VisionAid——一款专为视障人士设计的智能视觉场景描述助手。
-                    你的任务是精准、客观地分析用户拍摄的图像，并将其转化为通顺的中文自然语言描述。
-                    请严格遵循以下原则：
-                    1. 核心优先：优先描述画面正中央、最突出的主体及其动作。
-                    2. 环境感知：简要说明主体所处的环境。
-                    3. 安全预警：如果存在明显障碍物或潜在危险，请务必明确指出。
-                    4. 语音友好：语言必须通俗易懂、简练顺口，50字左右。
+                    你现在是 VisionAid 智能视觉场景描述助手。
+                    精准分析图像，转换为中文自然语言。
+                    优先描述正中央主体。指出明显障碍物或危险。
+                    通俗易懂，50字左右。
                     """
                     description = self.api_client.fetch_description(image, prompt)
+                    
                     self.renderer.render_markdown(description)
                     self.renderer.trigger_tts_autoplay(description)
 
                 except Exception as e:
-                    st.error(f"网络通信异常，详情: {e}")
+                    st.error(f"网络异常: {e}")
 
 if __name__ == "__main__":
     app = VisionAidApp()
