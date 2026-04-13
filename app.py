@@ -4,6 +4,8 @@ from PIL import Image
 import io
 import base64
 from gtts import gTTS
+# ⚠️ 引入新的第三方后置摄像头专属组件
+from streamlit_back_camera_input import back_camera_input
 
 class GeminiAPIClient:
     def __init__(self):
@@ -19,7 +21,6 @@ class GeminiAPIClient:
     @st.cache_resource(show_spinner=False)
     def _get_model(_self):
         genai.configure(api_key=_self.api_key)
-        # 使用最新的 2.5 flash 模型
         return genai.GenerativeModel('gemini-2.5-flash')
 
     def fetch_description(self, image_obj, prompt) -> str:
@@ -35,25 +36,12 @@ class ImageProcessor:
 class AccessibilityRenderer:
     @staticmethod
     def inject_custom_css():
+        # 清理掉了之前那些导致界面变形的“暴力放大”代码
+        # 只保留隐藏页眉页脚，还原最清爽的界面
         css = """
         <style>
         header {visibility: hidden;}
         footer {visibility: hidden;}
-        div[data-testid="stCameraInput"] button {
-            transform: scale(2.2) !important;
-            transform-origin: center center !important;
-            margin: 40px auto !important;
-            padding: 15px !important;
-            background-color: #28B463 !important;
-            color: white !important;
-            border-radius: 12px !important;
-            display: block !important;
-        }
-        div[data-testid="stCameraInput"] button[title="Switch camera"] {
-            transform: scale(3.5) !important;
-            transform-origin: top right !important;
-            background-color: rgba(0,0,0,0.7) !important;
-        }
         </style>
         """
         st.markdown(css, unsafe_allow_html=True)
@@ -88,8 +76,10 @@ class VisionAidApp:
 
     def run_ui(self):
         st.markdown("<h2 style='text-align: center;'>👁️ VisionAid 语音视觉助手</h2>", unsafe_allow_html=True)
-        st.write("---")
-        camera_photo = st.camera_input("拍照探测环境", label_visibility="collapsed")
+        st.markdown("<h4 style='text-align: center; color: #28B463;'>👇 盲触模式：直接点击下方画面任意位置拍照 👇</h4>", unsafe_allow_html=True)
+        
+        # ⚠️ 核心替换：使用不需要按钮、默认后置的黑客组件
+        camera_photo = back_camera_input()
 
         if camera_photo is not None:
             image_bytes = camera_photo.getvalue()
@@ -102,7 +92,6 @@ class VisionAidApp:
                     
                     self.renderer.render_markdown(description)
                     self.renderer.trigger_invisible_audio(description)
-                # 就是这下面两行，刚才你大概率没复制到！
                 except Exception as e:
                     st.error(f"分析失败，请检查网络或密钥: {e}")
 
