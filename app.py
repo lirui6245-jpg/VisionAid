@@ -4,12 +4,12 @@ from PIL import Image
 import io
 import base64
 from gtts import gTTS
-# 引入第三方后置摄像头组件
 from streamlit_back_camera_input import back_camera_input
 
 class GeminiAPIClient:
     def __init__(self):
         self.api_key = self._load_credentials()
+        genai.configure(api_key=self.api_key)
 
     def _load_credentials(self):
         try:
@@ -18,16 +18,34 @@ class GeminiAPIClient:
             st.error("系统严重异常：未读取到环境变量中的 API 密钥。")
             st.stop()
 
-    @st.cache_resource(show_spinner=False)
-    def _get_model(_self):
-        genai.configure(api_key=_self.api_key)
-        # ⚠️ 答辩保命版：退回最标准的官方通用名字，100%不报 404，且每天有 1500 次额度
-        return genai.GenerativeModel('gemini-1.5-flash')
-
     def fetch_description(self, image_obj, prompt) -> str:
-        model = self._get_model()
-        response = model.generate_content([prompt, image_obj])
-        return response.text.strip()
+        """ 
+        【核心防御】高可用多模型熔断降级机制
+        按优先级遍历模型池，自动规避 404 和 429 限流错误
+        """
+        model_pool = [
+            'gemini-1.5-flash-001',         # 最稳定的具体版本号
+            'gemini-1.5-flash',             # 标准别名
+            'gemini-1.5-pro',               # 高级版备用
+            'gemini-1.0-pro-vision-latest'  # 远古坚如磐石版兜底
+        ]
+        
+        last_error = ""
+        for model_name in model_pool:
+            try:
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content([prompt, image_obj])
+                return response.text.strip()
+            except Exception as e:
+                last_error = str(e)
+                # 遇到 404(找不到模型) 或 429(额度耗尽)，立刻无缝切换下一个备胎
+                if "404" in last_error or "429" in last_error or "quota" in last_error.lower():
+                    continue
+                else:
+                    raise e # 其他严重网络断开等错误则抛出
+                    
+        # 只有当所有备胎都死光了，才会向前端抛出报错
+        raise Exception(f"服务器模型池已枯竭，请稍后再试。底层提示: {last_error}")
 
 class ImageProcessor:
     @staticmethod
@@ -37,7 +55,6 @@ class ImageProcessor:
 class AccessibilityRenderer:
     @staticmethod
     def inject_custom_css():
-        # 保持极简无边框界面
         css = """
         <style>
         header {visibility: hidden;}
@@ -52,19 +69,13 @@ class AccessibilityRenderer:
 
     @staticmethod
     def trigger_audio_with_fallback(text: str):
-        """
-        【终极语音方案】
-        尝试自动播放。如果被手机安全机制拦截，则提供巨型盲触播放按钮作为安全网。
-        """
         try:
             tts = gTTS(text=text, lang='zh-cn')
             audio_fp = io.BytesIO()
             tts.write_to_fp(audio_fp)
             audio_fp.seek(0)
-            # 使用 audio/mpeg 提高在 iOS 设备上的兼容性
             audio_base64 = base64.b64encode(audio_fp.read()).decode('utf-8')
             
-            # 双重保险：自动播放属性 + 巨型盲触备用按钮
             audio_html = f"""
                 <audio id="visionaid-audio" autoplay="autoplay" src="data:audio/mpeg;base64,{audio_base64}"></audio>
                 <button onclick="document.getElementById('visionaid-audio').play()" 
@@ -94,7 +105,6 @@ class VisionAidApp:
         st.markdown("<h2 style='text-align: center;'>👁️ VisionAid 语音视觉助手</h2>", unsafe_allow_html=True)
         st.markdown("<h4 style='text-align: center; color: #28B463;'>👇 直接点击下方画面任意位置拍照 👇</h4>", unsafe_allow_html=True)
         
-        # 使用黑客组件：无按钮、默认后置、全屏盲触拍照
         camera_photo = back_camera_input()
 
         if camera_photo is not None:
@@ -106,7 +116,6 @@ class VisionAidApp:
                     prompt = "你现在是 VisionAid 智能视觉场景描述助手。任务：精准分析用户拍摄的图像，将其转化为通顺的中文场景描述。1. 优先描述正中央主体及其动作。2. 指出明显的障碍物、台阶或安全危险。3. 语言精炼顺口，长度在 50 字以内，方便语音播报。"
                     description = self.api_client.fetch_description(image, prompt)
                     
-                    # 渲染文字并执行语音双重保险方案
                     self.renderer.render_markdown(description)
                     self.renderer.trigger_audio_with_fallback(description)
                 except Exception as e:
