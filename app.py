@@ -21,7 +21,7 @@ class GeminiAPIClient:
     @st.cache_resource(show_spinner=False)
     def _get_model(_self):
         genai.configure(api_key=_self.api_key)
-        # 使用 2.5 flash，确保你已经配置了新的 API Key
+        # Gemini 2.5 Flash
         return genai.GenerativeModel('gemini-2.5-flash')
 
     def fetch_description(self, image_obj, prompt) -> str:
@@ -37,14 +37,17 @@ class ImageProcessor:
     @staticmethod
     def is_image_valid(image) -> tuple[bool, str]:
         """
-        【专属业务逻辑 1】: 合法性校验网关 (对应第三周活动图)
-        端侧计算灰度均值，拦截纯黑/被手指遮挡的无效图片
+        Frame validity gate.
+
+        Computes the mean brightness of the frame on-device and rejects
+        frames that are essentially black or blocked by a finger, so that
+        no model call is spent on obviously unusable input.
         """
         grayscale_image = image.convert("L")
         stat = ImageStat.Stat(grayscale_image)
         mean_brightness = stat.mean[0]
         
-        # 亮度低于15认定为极暗或遮挡
+        # Below 15 is treated as too dark or obstructed
         if mean_brightness < 15: 
             return False, "镜头可能被手指遮挡，或环境光线极暗，请调整手机后重试。"
         return True, ""
@@ -53,13 +56,13 @@ class AccessibilityRenderer:
     @staticmethod
     def inject_custom_css():
         """
-        【专属前端优化】: 视障定制高对比 UI (对应第一周非功能需求)
+        Injects the high-contrast stylesheet tuned for low-vision users.
         """
         css = """
         <style>
         header {visibility: hidden;}
         footer {visibility: hidden;}
-        /* 定制高对比度结果展示卡片 */
+        /* High-contrast result card */
         .a11y-card {
             background-color: #1A1A1A;
             border-left: 8px solid #FFD700;
@@ -74,7 +77,7 @@ class AccessibilityRenderer:
             line-height: 1.6;
             font-weight: bold;
         }
-        /* 动态系统状态呼吸灯 (UC3: 查看系统状态) */
+        /* Pulsing status indicator, shown while the model is working */
         .pulse-text {
             color: #28B463;
             font-size: 20px;
@@ -93,7 +96,7 @@ class AccessibilityRenderer:
 
     @staticmethod
     def render_markdown(text: str):
-        # 严格执行 Markdown 大字号和粗体显示，嵌入定制黑金高对比卡片
+        # Large bold type on the custom high-contrast card
         html = f"""
         <div class="a11y-card">
             <div class="a11y-text">### **{text}**</div>
@@ -135,7 +138,7 @@ class VisionAidApp:
         self.image_processor = ImageProcessor()
         self.setup_page()
 
-        # 初始化会话状态 (短时记忆 与 限流时间戳)
+        # Session state: short-term scene memory and the rate-limit timestamp
         if 'scene_history' not in st.session_state:
             st.session_state.scene_history = "这是首次扫描，尚无历史参照。"
         if 'last_request_time' not in st.session_state:
@@ -152,7 +155,7 @@ class VisionAidApp:
         camera_photo = back_camera_input()
 
         if camera_photo is not None:
-            # 【专属业务逻辑 2】: 会话限流器 (防并发/防抖动) 对应第三周功能结构图
+            # Rate limiter: guards against double taps and repeated frames
             current_time = time.time()
             if current_time - st.session_state.last_request_time < 5.0:
                 msg = "操作过于频繁，系统需要5秒冷却时间，请稍后再拍。"
@@ -163,17 +166,17 @@ class VisionAidApp:
             image_bytes = camera_photo.getvalue()
             image = self.image_processor.load_image_from_memory(image_bytes)
 
-            # 1. 触发合法性校验网关
+            # 1. Validate the frame
             is_valid, error_msg = self.image_processor.is_image_valid(image)
             if not is_valid:
                 self.renderer.render_markdown(error_msg)
                 self.renderer.trigger_audio_with_fallback(error_msg)
                 return
 
-            # 更新合法请求时间戳
+            # Record the timestamp of this accepted request
             st.session_state.last_request_time = current_time
 
-            # 2. 触发动态状态展示 (UC3)
+            # 2. Show the processing indicator
             self.renderer.render_system_status("AI 正在深度感知当前环境，请稍候...")
 
             try:
